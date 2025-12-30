@@ -1,5 +1,5 @@
-.wav
-transcript.txt
+*.wav
+server/transcript.txt
 #PLatformIO Project Ignore File
 
 .pio
