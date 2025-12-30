@@ -20,28 +20,30 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     print("Connected:", addr)
 
     recording = False
-
+    wf = None
     while True:
-        wf = wave.open(WAV_FILE, "wb")
-        wf.setnchannels(CHANNELS)
-        wf.setsampwidth(SAMPLE_WIDTH)
-        wf.setframerate(SAMPLE_RATE)
-        
         data = conn.recv(1024)
+        #print(f"Received {len(data)} bytes")
         if not data:
             break
         
         if data.startswith(b"START"):
             print("START recording")
             recording = True
+            wf = wave.open(WAV_FILE, "wb")
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(SAMPLE_WIDTH)
+            wf.setframerate(SAMPLE_RATE)
            
 
-        elif data.startswith(b"STOP"):
+        elif data.find(b"STOP") != -1:
             print("STOP recording")
             recording = False
-            wf.close()
+            if wf:
+                wf.close()
+                wf = None
             print("Saved recording.wav")
 
-        elif recording:
+        elif recording and wf:
             wf.writeframes(data)
 

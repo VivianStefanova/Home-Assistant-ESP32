@@ -6,7 +6,8 @@
 const char* ssid       = "Vin1";
 const char* password   = "00000000";
 
-const char* serverIP   = "192.168.1.100";   // PC IP
+//Lookup server IP and port with ipconfig
+const char* serverIP   = "192.168.110.219";   // PC IP
 const uint16_t serverPort = 5000;
 
 #define I2S_WS 25
@@ -76,7 +77,8 @@ void setup() {
   Serial.println("WiFi connected");
 
   client.connect(serverIP, serverPort);
-  Serial.println("Connected to server");
+  Serial.println(client.connected() ? "Connection successful" : "Connection failed");
+  
 }
 
 void loop() {
@@ -84,20 +86,27 @@ void loop() {
   static bool lastButton = false;
   bool button = digitalRead(BUTTON_PIN);
 
+  /* -------- START RECORDING -------- */
+  if (button && !lastButton) {
+    client.write("START\n");
+    i2s_zero_dma_buffer(I2S_PORT);
+    recording = true;
+    Serial.println("START");
+  }
+
   if (button && recording) {
     int16_t buffer[I2S_BUF_SAMPLES];
     size_t bytes_read;
 
     i2s_read(I2S_PORT, buffer, sizeof(buffer),
              &bytes_read, portMAX_DELAY);
-
+    
     client.write((uint8_t*)buffer, bytes_read);
   }
 
   /* -------- STOP RECORDING -------- */
   if (!button && lastButton && recording) {
     client.write("STOP\n");
-    i2s_stop(I2S_PORT);
     recording = false;
     Serial.println("STOP");
   }
