@@ -13,37 +13,41 @@ WAV_FILE = "recording.wav"
 print("Server listening...")
 
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.bind((HOST, PORT))
-    s.listen(1)
-    conn, addr = s.accept()
-    print("Connected:", addr)
+try:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((HOST, PORT))
+        s.listen(1)
+        print("Server listening...")
+        conn, addr = s.accept()
+        print("Connected:", addr)
 
-    recording = False
-    wf = None
-    while True:
-        data = conn.recv(1024)
-        #print(f"Received {len(data)} bytes")
-        if not data:
-            break
-        
-        if data.startswith(b"START"):
-            print("START recording")
-            recording = True
-            wf = wave.open(WAV_FILE, "wb")
-            wf.setnchannels(CHANNELS)
-            wf.setsampwidth(SAMPLE_WIDTH)
-            wf.setframerate(SAMPLE_RATE)
-           
+        recording = False
+        wf = None
 
-        elif data.find(b"STOP") != -1:
-            print("STOP recording")
-            recording = False
-            if wf:
-                wf.close()
-                wf = None
-            print("Saved recording.wav")
+        while True:
+            data = conn.recv(1024)
+            if not data:
+                break
 
-        elif recording and wf:
-            wf.writeframes(data)
+            if data.startswith(b"START"):
+                recording = True
+                wf = wave.open(WAV_FILE, "wb")
+                wf.setnchannels(CHANNELS)
+                wf.setsampwidth(SAMPLE_WIDTH)
+                wf.setframerate(SAMPLE_RATE)
+                print("START recording")
 
+            elif data.find(b"STOP") != -1:
+                if wf:
+                    wf.close()
+                    wf = None
+                recording = False
+                print("STOP recording -> saved WAV")
+
+            elif recording and wf:
+                wf.writeframes(data)
+
+except KeyboardInterrupt:
+    print("\nServer stopped by user")
+    if wf:
+        wf.close()
