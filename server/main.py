@@ -1,72 +1,66 @@
+import os
 import socket
+import tempfile
 import wave
 
 from voice import transcribe_file, ask_llama
 from tts import tts
 
-# IP = "127.0.0.1"
-# PORT = 5005
 HOST = "0.0.0.0"
-PORT = 5000
+PORT = 5005
 
 SAMPLE_RATE = 16000
 CHANNELS = 1
 SAMPLE_WIDTH = 2  # bytes
 
-WAV_FILE = "recording.wav"
-
 if __name__ == "__main__":
-#     # s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-#     # s.bind((IP, PORT))
-
-#     # data, addr = s.recv(1024)
 #     text = transcribe_file("test2.mp3")
 #     response = ask_llama(text)
 #     tts(response, "response.wav")
-
     print("Server listening...")
 
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.bind((HOST, PORT))
-            s.listen(1)
-            print("Server listening...")
-            conn, addr = s.accept()
-            print("Connected:", addr)
+            s.settimeout(1)
 
-            recording = False
-            wf = None
+            client_addr: str | None = None
+            received_wav: str | None = None
+            audio_bytes: list[bytes] = []
 
             while True:
-                data = conn.recv(1024)
-                if not data:
-                    break
+                try:
+                    data, client_addr = s.recvfrom(256)
+                    if not data:
+                        break
 
-                if data.startswith(b"START"):
-                    recording = True
-                    wf = wave.open(WAV_FILE, "wb")
-                    wf.setnchannels(CHANNELS)
-                    wf.setsampwidth(SAMPLE_WIDTH)
-                    wf.setframerate(SAMPLE_RATE)
-                    print("START recording")
+                    if data.startswith(b"START"):
+                        print("START recording")
+                        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode='wb') as f:
+                            received_wav = f.name
 
-                elif data.find(b"STOP") != -1:
-                    if wf:
-                        wf.close()
-                        wf = None
-                    recording = False
-                    print("STOP recording -> saved WAV")
+                    elif data.find(b"STOP") != -1 and received_wav:
+                        with wave.open(received_wav, 'wb') as wav_file:
+                            wav_file.setnchannels(CHANNELS)
+                            wav_file.setsampwidth(SAMPLE_WIDTH)
+                            wav_file.setframerate(SAMPLE_RATE)
+                
+                            wav_file.writeframes(b''.join(audio_bytes))
 
-                    transcript = transcribe_file(WAV_FILE)
+                        print("STOP recording -> saved WAV")
+                        transcript = transcribe_file(received_wav)
+                        print("Received transcription: " + transcript.strip())
 
-                    with open("transcript.txt", "w", encoding="utf-8") as f:
-                        f.write(transcript.strip())
-                        
-                    print("Transcription saved to transcript.txt")    
+                        os.remove(received_wav)
+                        received_wav = None
+                        audio_bytes = []
 
-                elif recording and wf:
-                    wf.writeframes(data)
+                    elif received_wav:
+                        audio_bytes.append(data)
+                except socket.timeout:
+                    continue
     except KeyboardInterrupt:
         print("\nServer stopped by user")
-        if wf:
-            wf.close()
+
+        if received_wav:
+            os.remove(received_wav)
