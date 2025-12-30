@@ -1,5 +1,6 @@
 import socket
 import wave
+from faster_whisper import WhisperModel
 
 HOST = "0.0.0.0"
 PORT = 5000
@@ -9,6 +10,9 @@ CHANNELS = 1
 SAMPLE_WIDTH = 2  # bytes
 
 WAV_FILE = "recording.wav"
+
+# Load Whisper model once
+model = WhisperModel("small", device="cpu")  # use "cuda" if you have GPU
 
 print("Server listening...")
 
@@ -43,6 +47,17 @@ try:
                     wf = None
                 recording = False
                 print("STOP recording -> saved WAV")
+
+                 # TRANSCRIBE with Whisper
+                print("Transcribing...")
+                segments, info = model.transcribe(WAV_FILE)
+                transcript = ""
+                for segment in segments:
+                    transcript += segment.text + " "
+                #print("Transcript:", transcript.strip())
+                with open("transcript.txt", "w", encoding="utf-8") as f:
+                    f.write(transcript.strip())
+                print("Transcription saved to transcript.txt")    
 
             elif recording and wf:
                 wf.writeframes(data)
