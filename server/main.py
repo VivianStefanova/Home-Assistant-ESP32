@@ -3,15 +3,11 @@ import socket
 import tempfile
 import wave
 
-from voice import transcribe_file, ask_llama
-from tts import tts
+import speech
+from ai import ask_llama
 
 HOST = "0.0.0.0"
 PORT = 5005
-
-SAMPLE_RATE = 16000
-CHANNELS = 1
-SAMPLE_WIDTH = 2  # bytes
 
 if __name__ == "__main__":
     print("Server listening...")
@@ -38,19 +34,19 @@ if __name__ == "__main__":
 
                     elif data.find(b"STOP") != -1 and received_wav:
                         with wave.open(received_wav, 'wb') as wav_file:
-                            wav_file.setnchannels(CHANNELS)
-                            wav_file.setsampwidth(SAMPLE_WIDTH)
-                            wav_file.setframerate(SAMPLE_RATE)
+                            wav_file.setnchannels(speech.CHANNELS)
+                            wav_file.setsampwidth(speech.SAMPLE_WIDTH)
+                            wav_file.setframerate(speech.SAMPLE_RATE)
                 
                             wav_file.writeframes(b''.join(audio_bytes))
 
                         print("STOP recording -> saved WAV")
-                        transcript = transcribe_file(received_wav)
+                        transcript = speech.transcribe_file(received_wav)
                         print("Received transcription: " + transcript.strip())
 
                         response = ask_llama(transcript)
                         print(f"\n>>> LLAMA SAYS: {response}\n")
-                        tts(response, os.path.join("audio_tests", "response.wav"))
+                        speech.tts(response, os.path.join("audio_tests", "response_new.wav"))
 
                         os.remove(received_wav)
                         received_wav = None
