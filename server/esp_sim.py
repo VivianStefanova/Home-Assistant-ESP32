@@ -1,11 +1,12 @@
+import os
 import socket
+import sys
 import time
 import wave
-import sys
 
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 5005
-INPUT_FILE = "response16.wav"
+INPUT_FILE = os.path.join("audio_tests", "response16.wav")
 CHUNK_SIZE = 256
 
 def emulate_esp32():

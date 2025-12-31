@@ -14,9 +14,6 @@ CHANNELS = 1
 SAMPLE_WIDTH = 2  # bytes
 
 if __name__ == "__main__":
-#     text = transcribe_file("test2.mp3")
-#     response = ask_llama(text)
-#     tts(response, "response.wav")
     print("Server listening...")
 
     try:
@@ -50,6 +47,10 @@ if __name__ == "__main__":
                         print("STOP recording -> saved WAV")
                         transcript = transcribe_file(received_wav)
                         print("Received transcription: " + transcript.strip())
+
+                        response = ask_llama(transcript)
+                        print(f"\n>>> LLAMA SAYS: {response}\n")
+                        tts(response, os.path.join("audio_tests", "response.wav"))
 
                         os.remove(received_wav)
                         received_wav = None

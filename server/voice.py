@@ -2,10 +2,11 @@ from faster_whisper import WhisperModel
 import ollama
 
 LLAMA_MODEL = "llama3.2"
-model = WhisperModel("base", device="cpu", compute_type="int8")
+
+stt_model = WhisperModel("base", device="cpu", compute_type="int8")
 
 def transcribe_file(filename: str) -> str:
-    segments, _ = model.transcribe(filename, language="en", beam_size=5)
+    segments, _ = stt_model.transcribe(filename, language="en", beam_size=5)
     
     full_text = ""
     for segment in segments:
@@ -15,8 +16,6 @@ def transcribe_file(filename: str) -> str:
 
 def ask_llama(text: str) -> str:
     """Sends text to local Llama and prints response"""
-    print(f"\n[Sending to {LLAMA_MODEL}...] '{text}'")
-    
     response = ollama.chat(model=LLAMA_MODEL, messages=[
         {
             'role': 'system', 
@@ -28,6 +27,4 @@ def ask_llama(text: str) -> str:
         },
     ])
     
-    ai_reply = response['message']['content']
-    print(f"\n>>> LLAMA SAYS: {ai_reply}\n")
-    return ai_reply
+    return response['message']['content']
