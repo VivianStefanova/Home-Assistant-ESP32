@@ -1,14 +1,17 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include "driver/i2s.h"
+#include <WiFiUdp.h>
+#include <WiFiUdp.h>
+
 
 //Wifi credentials
 const char* ssid       = "Vin1";
 const char* password   = "00000000";
 
 //Lookup server IP and port with ipconfig
-const char* serverIP   = "192.168.110.219";   // PC IP
-const uint16_t serverPort = 5000;
+IPAddress serverIP(192, 168, 110, 219);   // PC IP
+const uint16_t serverPort = 5005;
 
 #define I2S_WS 25
 #define I2S_SCK 26
@@ -21,30 +24,40 @@ const uint16_t serverPort = 5000;
 #define SAMPLE_RATE   16000
 #define I2S_BUF_SAMPLES 256   // small = stable
 
-WiFiClient client;
+WiFiUDP udp;
+
+//State
 bool recording = false;
+bool playingTTS = false;
+bool waitngForServer = false;
 
 // TTS buffer
-#define TTS_BUFFER_SIZE 512
+#define TTS_BUFFER_SIZE 256
 uint8_t ttsBuffer[TTS_BUFFER_SIZE];
 size_t bytes_written;
-bool playingTTS = false;
+
 
 void playTTS() {
-    while (client.connected() && client.available() > 0) {
-        size_t len = client.read(ttsBuffer, TTS_BUFFER_SIZE);
-        if (len > 0) {
-            i2s_write(I2S_PORT, ttsBuffer, len, &bytes_written, portMAX_DELAY);
+    Serial.println(">> Starting TTS playback");
+
+    while (playingTTS) {
+        int packetSize = udp.parsePacket();
+        if (packetSize > 0) {
+            int len = udp.read(ttsBuffer, TTS_BUFFER_SIZE);
+            if (len > 0) {
+                // Check for STOP
+                if (strncmp((char*)ttsBuffer, "STOP", 4) == 0) {
+                    Serial.println(">> STOP received, stopping TTS playback");
+                    playingTTS = false;
+                    break;
+                }
+
+                // Otherwise, write audio to I2S
+                i2s_write(I2S_PORT, ttsBuffer, len, &bytes_written, portMAX_DELAY);
+            }
         }
     }
 }
-
-
-// #define BUFFER_SIZE 1024
-
-// int16_t buffer[BUFFER_SIZE];      // temporary buffer
-// int16_t audioData[16000*2];       // 2 seconds @16kHz
-// size_t audioIndex = 0;
 
 // #define SOFT_GAIN 3   // 2–3 is safe
 
@@ -91,13 +104,25 @@ void setup() {
   }
   Serial.println("WiFi connected");
 
-  client.connect(serverIP, serverPort);
-  Serial.println(client.connected() ? "Connection successful" : "Connection failed");
+  udp.begin(12345); // local port
+  Serial.println("Set up complete");
   
 }
 
 void loop() {
-  if(playingTTS) {
+  if(waitngForServer) {
+    Serial.println("Waiting for TTS from server...");
+    int packetSize = udp.parsePacket();
+    if (packetSize > 0) {
+      char header[10];
+      int len = udp.read(header, sizeof(header) - 1);
+      if (strncmp((char*)header, "START", 5) == 0) {
+                    Serial.println(">> START TTS received");
+                    playingTTS = true;
+                    waitngForServer = false;
+                }
+    }
+  }else if (playingTTS){ 
     Serial.println("Playing TTS");
     playTTS();
     Serial.println("TTS playback finished");
@@ -108,7 +133,9 @@ void loop() {
 
     //Start recording
     if (button && !lastButton) {
-      client.write("START\n");
+      udp.beginPacket(serverIP, serverPort);
+      udp.print("START\n");
+      udp.endPacket();
       i2s_zero_dma_buffer(I2S_PORT);
       recording = true;
       Serial.println("START");
@@ -120,37 +147,20 @@ void loop() {
 
       i2s_read(I2S_PORT, buffer, sizeof(buffer),
               &bytes_read, portMAX_DELAY);
-      
-      client.write((uint8_t*)buffer, bytes_read);
+      udp.beginPacket(serverIP, serverPort);
+      udp.write((uint8_t*)buffer, bytes_read);;
+      udp.endPacket();
     }
     //Stop recording
     if (!button && lastButton && recording) {
-      client.write("STOP\n");
+      udp.beginPacket(serverIP, serverPort);
+      udp.print("STOP\n");
+      udp.endPacket();
       recording = false;
-      playingTTS = true;
+      waitngForServer = true;
       Serial.println("STOP");
     }
 
     lastButton = button;
   }
-
-
-
-
-  // if (digitalRead(BUTTON_PIN) == HIGH) {
-  //   Serial.println("Button pressed");
-  //   size_t bytes_read;
-  //   i2s_read(I2S_PORT, buffer, sizeof(buffer), &bytes_read, portMAX_DELAY);
-  //   for (size_t i = 0; i < bytes_read / 2 && audioIndex < sizeof(audioData)/2; i++) {
-  //     audioData[audioIndex++] = buffer[i];
-  //   }
-  // }
-  // // Button released → play
-  // else if (audioIndex > 0) {
-  //   size_t bytes_written;
-  //   delay(100);
-  //   applyGain(audioData, audioIndex);
-  //   i2s_write(I2S_PORT, audioData, audioIndex*2, &bytes_written, portMAX_DELAY);
-  //   audioIndex = 0; // reset for next recording
-  // }
 }
