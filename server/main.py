@@ -8,6 +8,25 @@ from ai import ask_llama
 
 HOST = "0.0.0.0"
 PORT = 5005
+CHUNK_SIZE = 256
+
+def send_wav(sock: socket.socket, addr: tuple[str, int], filename: str):
+     with wave.open(filename, 'rb') as wf:
+        sock.sendto(b"START", addr)
+        print(">> Streaming Audio...")
+
+        while True:
+            data = wf.readframes(CHUNK_SIZE // (wf.getsampwidth() * wf.getnchannels()))
+            if not data:
+                break
+            
+            s.sendto(data, addr)
+
+        # Send a few STOP packets just to be safe (UDP is unreliable)
+        for _ in range(3):
+            s.sendto(b"STOP", addr)
+        
+        print("\n>> Finished streaming file.")
 
 if __name__ == "__main__":
     print("Server listening...")
@@ -17,7 +36,6 @@ if __name__ == "__main__":
             s.bind((HOST, PORT))
             s.settimeout(1)
 
-            client_addr: str | None = None
             received_wav: str | None = None
             audio_bytes: list[bytes] = []
 
@@ -43,13 +61,19 @@ if __name__ == "__main__":
                         print("STOP recording -> saved WAV")
                         transcript = speech.transcribe_file(received_wav)
                         print("Received transcription: " + transcript.strip())
+                        os.remove(received_wav)
+                        received_wav = None
 
                         response = ask_llama(transcript)
                         print(f"\n>>> LLAMA SAYS: {response}\n")
-                        speech.tts(response, os.path.join("audio_tests", "response_new.wav"))
 
-                        os.remove(received_wav)
-                        received_wav = None
+                        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode='wb') as f:
+                            response_wav = f.name
+
+                        speech.tts(response, response_wav)
+                        send_wav(s, client_addr, response_wav)
+                        os.remove(response_wav)
+
                         audio_bytes = []
 
                     elif received_wav:

@@ -4,9 +4,11 @@ import sys
 import time
 import wave
 
+import speech
+
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 5005
-INPUT_FILE = os.path.join("audio_tests", "response_new.wav")
+INPUT_FILE = os.path.join("audio_tests", "date.wav")
 CHUNK_SIZE = 256
 
 def emulate_esp32():
@@ -49,6 +51,38 @@ def emulate_esp32():
             time.sleep(0.01)
         
         print(">> Sent STOP. Done.")
+
+        sock.settimeout(1)
+
+        received_wav: str | None = None
+        audio_bytes: list[bytes] = []
+
+        while True:
+            try:
+                data, _ = sock.recvfrom(256)
+                if not data:
+                    break
+
+                if data.startswith(b"START"):
+                    print("START recording")
+                    received_wav = os.path.join("audio_tests", "response.wav")
+
+                elif data.find(b"STOP") != -1 and received_wav:
+                    with wave.open(received_wav, 'wb') as wav_file:
+                        wav_file.setnchannels(speech.CHANNELS)
+                        wav_file.setsampwidth(speech.SAMPLE_WIDTH)
+                        wav_file.setframerate(speech.SAMPLE_RATE)
+            
+                        wav_file.writeframes(b''.join(audio_bytes))
+
+                    print("STOP recording -> saved WAV")
+                    break
+
+                elif received_wav:
+                    audio_bytes.append(data)
+            except socket.timeout:
+                continue
+
         sock.close()
 
 if __name__ == "__main__":
