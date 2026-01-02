@@ -22,7 +22,7 @@ const uint16_t serverPort = 5005;
 #define I2S_PORT I2S_NUM_0
 
 #define SAMPLE_RATE   16000
-#define I2S_BUF_SAMPLES 256   // small = stable
+#define I2S_BUF_SAMPLES 128
 
 WiFiUDP udp;
 
@@ -105,8 +105,21 @@ void setup() {
   Serial.println("WiFi connected");
 
   udp.begin(12345); // local port
+
   Serial.println("Set up complete");
-  
+
+
+  Serial.printf("Free heap before UDP: %u\n", ESP.getFreeHeap());
+  uint8_t test[256] = {0};
+  udp.beginPacket(serverIP, serverPort);
+  if (udp.write(test, 256) != 256) {
+      Serial.println("Failed write");
+  }
+  if (udp.endPacket() != 1) {
+      Serial.println("Failed endPacket");
+  }
+  Serial.printf("Free heap after UDP: %u\n", ESP.getFreeHeap());
+
 }
 
 void loop() {
@@ -121,7 +134,9 @@ void loop() {
                     playingTTS = true;
                     waitngForServer = false;
                 }
+
     }
+    delay(500);
   }else if (playingTTS){ 
     Serial.println("Playing TTS");
     playTTS();
