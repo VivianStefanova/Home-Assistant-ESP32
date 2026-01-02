@@ -24,6 +24,21 @@ const uint16_t serverPort = 5000;
 WiFiClient client;
 bool recording = false;
 
+// TTS buffer
+#define TTS_BUFFER_SIZE 512
+uint8_t ttsBuffer[TTS_BUFFER_SIZE];
+size_t bytes_written;
+bool playingTTS = false;
+
+void playTTS() {
+    while (client.connected() && client.available() > 0) {
+        size_t len = client.read(ttsBuffer, TTS_BUFFER_SIZE);
+        if (len > 0) {
+            i2s_write(I2S_PORT, ttsBuffer, len, &bytes_written, portMAX_DELAY);
+        }
+    }
+}
+
 
 // #define BUFFER_SIZE 1024
 
@@ -82,36 +97,42 @@ void setup() {
 }
 
 void loop() {
-  // Button pressed → record
-  static bool lastButton = false;
-  bool button = digitalRead(BUTTON_PIN);
+  if(playingTTS) {
+    Serial.println("Playing TTS");
+    playTTS();
+    Serial.println("TTS playback finished");
+  }else{
+    // Button pressed → record
+    static bool lastButton = false;
+    bool button = digitalRead(BUTTON_PIN);
 
-  /* -------- START RECORDING -------- */
-  if (button && !lastButton) {
-    client.write("START\n");
-    i2s_zero_dma_buffer(I2S_PORT);
-    recording = true;
-    Serial.println("START");
+    //Start recording
+    if (button && !lastButton) {
+      client.write("START\n");
+      i2s_zero_dma_buffer(I2S_PORT);
+      recording = true;
+      Serial.println("START");
+    }
+
+    if (button && recording) {
+      int16_t buffer[I2S_BUF_SAMPLES];
+      size_t bytes_read;
+
+      i2s_read(I2S_PORT, buffer, sizeof(buffer),
+              &bytes_read, portMAX_DELAY);
+      
+      client.write((uint8_t*)buffer, bytes_read);
+    }
+    //Stop recording
+    if (!button && lastButton && recording) {
+      client.write("STOP\n");
+      recording = false;
+      playingTTS = true;
+      Serial.println("STOP");
+    }
+
+    lastButton = button;
   }
-
-  if (button && recording) {
-    int16_t buffer[I2S_BUF_SAMPLES];
-    size_t bytes_read;
-
-    i2s_read(I2S_PORT, buffer, sizeof(buffer),
-             &bytes_read, portMAX_DELAY);
-    
-    client.write((uint8_t*)buffer, bytes_read);
-  }
-
-  /* -------- STOP RECORDING -------- */
-  if (!button && lastButton && recording) {
-    client.write("STOP\n");
-    recording = false;
-    Serial.println("STOP");
-  }
-
-  lastButton = button;
 
 
 
