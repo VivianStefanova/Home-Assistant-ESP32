@@ -9,7 +9,7 @@ SAMPLE_WIDTH = 2  # bytes
 
 current_dir = os.getcwd()
 
-tts_model_path = os.path.join(current_dir, "voices", "en_US-lessac-medium.onnx")
+tts_model_path = os.path.join(current_dir, "voices", "en_US-lessac-low.onnx")
 tts_model = PiperVoice.load(tts_model_path)
 
 stt_model = WhisperModel("base", device="cpu", compute_type="int8")
