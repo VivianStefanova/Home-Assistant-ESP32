@@ -1,3 +1,4 @@
+import argparse
 import os
 import socket
 import tempfile
@@ -11,7 +12,7 @@ PORT = 5005
 CHUNK_SIZE = 256
 
 def send_wav(sock: socket.socket, addr: tuple[str, int], filename: str):
-     with wave.open(filename, 'rb') as wf:
+    with wave.open(filename, 'rb') as wf:
         sock.sendto(b"START", addr)
         print(">> Streaming Audio...")
 
@@ -20,15 +21,19 @@ def send_wav(sock: socket.socket, addr: tuple[str, int], filename: str):
             if not data:
                 break
             
-            s.sendto(data, addr)
+            sock.sendto(data, addr)
 
         # Send a few STOP packets just to be safe (UDP is unreliable)
-        for _ in range(3):
-            s.sendto(b"STOP", addr)
+        for _ in range(10):
+            sock.sendto(b"STOP", addr)
         
         print("\n>> Finished streaming file.")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="ESP32 Voice Assistant Server")
+    parser.add_argument("--test", "-t", action="store_true", help="Run in test mode - saves audio files.")
+    args = parser.parse_args()
+
     print("Server listening...")
 
     try:
@@ -41,12 +46,20 @@ if __name__ == "__main__":
 
             while True:
                 try:
-                    data, client_addr = s.recvfrom(256)
+                    data, client_addr = s.recvfrom(CHUNK_SIZE)
                     if not data:
                         break
 
                     if data.startswith(b"START"):
                         print("START recording")
+
+                        if args.test:
+                            if not os.path.exists("tmp"):
+                                os.mkdir("tmp")
+
+                            received_wav = os.path.join("tmp", "received.wav")
+                            continue
+
                         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode='wb') as f:
                             received_wav = f.name
 
@@ -61,18 +74,25 @@ if __name__ == "__main__":
                         print("STOP recording -> saved WAV")
                         transcript = speech.transcribe_file(received_wav)
                         print("Received transcription: " + transcript.strip())
-                        os.remove(received_wav)
+
+                        if args.test:
+                            response_wav = os.path.join("tmp", "response.wav")
+                        else:
+                            os.remove(received_wav)
+
+                            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode='wb') as f:
+                                response_wav = f.name
+
                         received_wav = None
 
                         response = ask_llama(transcript)
                         print(f"\n>>> LLAMA SAYS: {response}\n")
 
-                        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode='wb') as f:
-                            response_wav = f.name
-
                         speech.tts(response, response_wav)
                         send_wav(s, client_addr, response_wav)
-                        os.remove(response_wav)
+
+                        if not args.test:
+                            os.remove(response_wav)
 
                         audio_bytes = []
 
@@ -83,5 +103,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\nServer stopped by user")
 
-        if received_wav:
+        if received_wav and not args.test:
             os.remove(received_wav)

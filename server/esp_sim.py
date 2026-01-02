@@ -11,7 +11,7 @@ SERVER_PORT = 5005
 CHUNK_SIZE = 256
 
 def emulate_esp32():
-    input_file = sys.argv[1] if len(sys.argv) > 1 else os.path.join("audio_tests", "test.wav")
+    input_file = sys.argv[1] if len(sys.argv) > 1 else os.path.join("audio_tests", "date.wav")
 
     with wave.open(input_file, 'rb') as wf:
         if wf.getframerate() != 16000:
@@ -47,12 +47,10 @@ def emulate_esp32():
         print("\n>> Finished streaming file.")
 
         # Send a few STOP packets just to be safe (UDP is unreliable)
-        for _ in range(3):
+        for _ in range(10):
             sock.sendto(b"STOP", (SERVER_IP, SERVER_PORT))
-            time.sleep(0.01)
         
         print(">> Sent STOP. Done.")
-
         sock.settimeout(1)
 
         received_wav: str | None = None
@@ -60,7 +58,8 @@ def emulate_esp32():
 
         while True:
             try:
-                data, _ = sock.recvfrom(256)
+                data, _ = sock.recvfrom(CHUNK_SIZE)
+                print(f"Received {len(data)} bytes")
                 if not data:
                     break
 
