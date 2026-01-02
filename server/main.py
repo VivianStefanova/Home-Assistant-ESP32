@@ -3,18 +3,27 @@ import os
 import socket
 import tempfile
 import wave
+import time
 
 import speech
 from ai import ask_llama
 
 HOST = "0.0.0.0"
 PORT = 5005
-CHUNK_SIZE = 256
+CHUNK_SIZE = 512
+
+SLEEP_TIME = 0.016
 
 def send_wav(sock: socket.socket, addr: tuple[str, int], filename: str):
     with wave.open(filename, 'rb') as wf:
-        sock.sendto(b"START", addr)
+        #sock.sendto(b"START", addr)
         print(">> Streaming Audio...")
+
+         # ---- HARD VALIDATION ----
+        assert wf.getnchannels() == 1, "WAV must be mono"
+        assert wf.getsampwidth() == 2, "WAV must be 16-bit"
+        assert wf.getframerate() == 16000, "WAV must be 16kHz"
+
 
         while True:
             data = wf.readframes(CHUNK_SIZE // (wf.getsampwidth() * wf.getnchannels()))
@@ -22,10 +31,12 @@ def send_wav(sock: socket.socket, addr: tuple[str, int], filename: str):
                 break
             
             sock.sendto(data, addr)
+            time.sleep(SLEEP_TIME)
 
         # Send a few STOP packets just to be safe (UDP is unreliable)
         for _ in range(10):
             sock.sendto(b"STOP", addr)
+            time.sleep(0.005)
         
         print("\n>> Finished streaming file.")
 

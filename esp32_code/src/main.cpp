@@ -22,7 +22,7 @@ const uint16_t serverPort = 5005;
 #define I2S_PORT I2S_NUM_0
 
 #define SAMPLE_RATE   16000
-#define I2S_BUF_SAMPLES 128
+#define I2S_BUF_SAMPLES 256
 
 WiFiUDP udp;
 
@@ -32,72 +32,83 @@ bool playingTTS = false;
 bool waitngForServer = false;
 
 // TTS buffer
-#define TTS_BUFFER_SIZE 256
+#define TTS_BUFFER_SIZE 512
 uint8_t ttsBuffer[TTS_BUFFER_SIZE];
 size_t bytes_written;
 
+#define AUDIO_RING_SIZE 8192
 
-#define MAX_QUEUE 32   // max number of packets to queue
+uint8_t audioRing[AUDIO_RING_SIZE];
+volatile size_t ringWrite = 0;
+volatile size_t ringRead = 0;
 
-struct TTS_Packet {
-    uint8_t data[TTS_BUFFER_SIZE];
-    int len;
-};
+size_t ringAvailable() {
+    if (ringWrite >= ringRead)
+        return ringWrite - ringRead;
+    return AUDIO_RING_SIZE - (ringRead - ringWrite);
+}
 
-TTS_Packet ttsQueue[MAX_QUEUE];
-int queueHead = 0;
-int queueTail = 0;
-bool stopReceived = false;
-
-void enqueuePacket(uint8_t* data, int len) {
-    int nextTail = (queueTail + 1) % MAX_QUEUE;
-    if (nextTail != queueHead) { // queue not full
-        memcpy(ttsQueue[queueTail].data, data, len);
-        ttsQueue[queueTail].len = len;
-        queueTail = nextTail;
+void ringPush(uint8_t* data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        audioRing[ringWrite++] = data[i];
+        ringWrite %= AUDIO_RING_SIZE;
     }
 }
 
-bool dequeuePacket(TTS_Packet* pkt) {
-    if (queueHead == queueTail) return false; // empty
-    *pkt = ttsQueue[queueHead];
-    queueHead = (queueHead + 1) % MAX_QUEUE;
-    return true;
+void ringPop(uint8_t* out, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        out[i] = audioRing[ringRead++];
+        ringRead %= AUDIO_RING_SIZE;
+    }
+}
+
+
+
+void flushUdp() {
+    while (udp.parsePacket() > 0) {
+        udp.read(ttsBuffer, TTS_BUFFER_SIZE);
+    }
 }
 
 void playTTS() {
-    Serial.println(">> Starting TTS playback");
-    playingTTS = true;
-    stopReceived = false;
+    uint8_t out[512];
+    unsigned long lastFeed = 0;
+
+    ringWrite = ringRead = 0;
+    i2s_zero_dma_buffer(I2S_PORT);
 
     while (playingTTS) {
+        // --- UDP receive ---
         int packetSize = udp.parsePacket();
         if (packetSize > 0) {
             int len = udp.read(ttsBuffer, TTS_BUFFER_SIZE);
-            if (len > 0) {
-                if (len <= 4 && strncmp((char*)ttsBuffer, "STOP", 4) == 0) {
-                    Serial.println(">> STOP received");
-                    stopReceived = true;
-                } else {
-                    enqueuePacket(ttsBuffer, len);
-                }
+
+            if (len == 4 && memcmp(ttsBuffer, "STOP", 4) == 0) {
+                playingTTS = false;
+                break;
+            }
+
+            len &= ~1;
+            ringPush(ttsBuffer, len);
+        }
+
+        // --- Timed I2S feed ---
+        if (millis() - lastFeed >= 16) {
+            lastFeed = millis();
+
+            if (ringAvailable() >= 512) {
+                ringPop(out, 512);
+                size_t written;
+                i2s_write(I2S_PORT, out, 512, &written, portMAX_DELAY);
             }
         }
 
-        // Play all queued packets
-        TTS_Packet pkt;
-        while (dequeuePacket(&pkt)) {
-            i2s_write(I2S_PORT, pkt.data, pkt.len, &bytes_written, portMAX_DELAY);
-        }
-
-        // Stop playback only when STOP received and queue is empty
-        if (stopReceived && queueHead == queueTail) {
-            playingTTS = false;
-        }
+        delay(1);
     }
-
-    Serial.println(">> TTS playback finished");
+    i2s_zero_dma_buffer(I2S_PORT);
+    flushUdp();
 }
+
 
 
 // #define SOFT_GAIN 3   // 2–3 is safe
@@ -164,27 +175,28 @@ void setup() {
 }
 int timeout=0;
 void loop() {
-  if(waitngForServer) {
-    Serial.println("Waiting for TTS from server...");
-    int packetSize = udp.parsePacket();
-    if (packetSize > 0) {
-      char header[10];
-      int len = udp.read(header, sizeof(header) - 1);
-      if (strncmp((char*)header, "START", 5) == 0) {
-                    Serial.println(">> START TTS received");
-                    playingTTS = true;
-                    waitngForServer = false;
-                }
+  //if(waitngForServer) {
+    // //Serial.println("Waiting for TTS from server...");
+    // int packetSize = udp.parsePacket();
+    // if (packetSize > 0) {
+    //   char header[10];
+    //   int len = udp.read(header, sizeof(header) - 1);
+    //   if (strncmp((char*)header, "START", 5) == 0) {
+    //                 Serial.println(">> START TTS received");
+    //                 playingTTS = true;
+    //                 waitngForServer = false;
+    //             }
 
-    }
-    timeout++;
-    //50 seconds timeout
-    if(timeout>50000){
-      Serial.println("Timeout waiting for server");
-      waitngForServer=false;
-      timeout=0;
-    }
-  }else if (playingTTS){ 
+    // }
+    // timeout++;
+    // //50 seconds timeout
+    // if(timeout>50000){
+    //   Serial.println("Timeout waiting for server");
+    //   waitngForServer=false;
+    //   timeout=0;
+    // }
+  //}else if (playingTTS){ 
+  if (playingTTS){
     Serial.println("Playing TTS");
     playTTS();
     Serial.println("TTS playback finished");
@@ -209,8 +221,8 @@ void loop() {
 
       i2s_read(I2S_PORT, buffer, sizeof(buffer),
               &bytes_read, portMAX_DELAY);
-      i2s_write(I2S_PORT, buffer, sizeof(buffer),
-              &bytes_read, portMAX_DELAY);
+      // i2s_write(I2S_PORT, buffer, sizeof(buffer),
+      //         &bytes_read, portMAX_DELAY);
       udp.beginPacket(serverIP, serverPort);
       udp.write((uint8_t*)buffer, bytes_read);;
       udp.endPacket();
@@ -221,7 +233,10 @@ void loop() {
       udp.print("STOP\n");
       udp.endPacket();
       recording = false;
-      waitngForServer = true;
+      //waitngForServer = true;
+      flushUdp();
+      i2s_zero_dma_buffer(I2S_PORT);
+      playingTTS = true;
       Serial.println("STOP");
     }
 
