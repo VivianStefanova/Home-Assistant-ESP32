@@ -8,11 +8,12 @@ import speech
 
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 5005
-INPUT_FILE = os.path.join("audio_tests", "date.wav")
 CHUNK_SIZE = 256
 
 def emulate_esp32():
-    with wave.open(INPUT_FILE, 'rb') as wf:
+    input_file = sys.argv[1] if len(sys.argv) > 1 else os.path.join("audio_tests", "test.wav")
+
+    with wave.open(input_file, 'rb') as wf:
         if wf.getframerate() != 16000:
             print(f"WARNING: Input file is {wf.getframerate()}Hz. Server expects 16000Hz.")
             print("The audio might sound fast (chipmunk) or slow (demon) on the other side.")
