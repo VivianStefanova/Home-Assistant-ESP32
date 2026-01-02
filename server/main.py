@@ -12,7 +12,7 @@ HOST = "0.0.0.0"
 PORT = 5005
 CHUNK_SIZE = 512
 
-SLEEP_TIME = 0.016
+SLEEP_TIME = 0.015
 
 def send_wav(sock: socket.socket, addr: tuple[str, int], filename: str):
     with wave.open(filename, 'rb') as wf:

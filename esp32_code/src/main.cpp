@@ -73,6 +73,7 @@ void flushUdp() {
 void playTTS() {
     uint8_t out[512];
     unsigned long lastFeed = 0;
+    bool feedRing = false;
 
     ringWrite = ringRead = 0;
     i2s_zero_dma_buffer(I2S_PORT);
@@ -93,18 +94,28 @@ void playTTS() {
         }
 
         // --- Timed I2S feed ---
-        if (millis() - lastFeed >= 16) {
-            lastFeed = millis();
+        if(ringAvailable() >5120) {
+            feedRing = true;
+        }
+        if (feedRing){
+          if (millis() - lastFeed >= 16) {
+              lastFeed = millis();
 
-            if (ringAvailable() >= 512) {
-                ringPop(out, 512);
-                size_t written;
-                i2s_write(I2S_PORT, out, 512, &written, portMAX_DELAY);
-            }
+              if (ringAvailable() >= 1024 ) {
+                  ringPop(out, 512);
+                  size_t written;
+                  i2s_write(I2S_PORT, out, 512, &written, portMAX_DELAY);
+              }
+          }
         }
 
-        delay(1);
+        //delay(1);
     }
+    if (ringAvailable() ) {
+                  ringPop(out, 512);
+                  size_t written;
+                  i2s_write(I2S_PORT, out, 512, &written, portMAX_DELAY);
+              }
     i2s_zero_dma_buffer(I2S_PORT);
     flushUdp();
 }
