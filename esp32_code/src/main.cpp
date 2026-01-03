@@ -23,29 +23,29 @@ bool checkLedCommand(const char* cmd) {
     return true;
   }
   if (strcmp(cmd, "LED ON") == 0) {
-    digitalWrite(LED_BLUE_PIN, HIGH);
-    digitalWrite(LED_GREEN_PIN, HIGH);
-    digitalWrite(LED_RED_PIN, HIGH);
+    digitalWrite(LED_BLUE_PIN, LOW);
+    digitalWrite(LED_GREEN_PIN, LOW);
+    digitalWrite(LED_RED_PIN, LOW);
     return true;
   } else if (strcmp(cmd, "LED OFF") == 0) {
-    digitalWrite(LED_BLUE_PIN, LOW);
-    digitalWrite(LED_GREEN_PIN, LOW);
-    digitalWrite(LED_RED_PIN, LOW);
+    digitalWrite(LED_BLUE_PIN, HIGH);
+    digitalWrite(LED_GREEN_PIN, HIGH);
+    digitalWrite(LED_RED_PIN, HIGH);
     return true;
   } else if (strcmp(cmd, "LED B") == 0) {
-    digitalWrite(LED_BLUE_PIN, HIGH);
-    digitalWrite(LED_GREEN_PIN, LOW);
-    digitalWrite(LED_RED_PIN, LOW);
-    return true;
-  } else if (strcmp(cmd, "LED G") == 0) {
     digitalWrite(LED_BLUE_PIN, LOW);
     digitalWrite(LED_GREEN_PIN, HIGH);
-    digitalWrite(LED_RED_PIN, LOW);
+    digitalWrite(LED_RED_PIN, HIGH);
     return true;
-  } else if (strcmp(cmd, "LED R") == 0) {
-    digitalWrite(LED_BLUE_PIN, LOW);
+  } else if (strcmp(cmd, "LED G") == 0) {
+    digitalWrite(LED_BLUE_PIN, HIGH);
     digitalWrite(LED_GREEN_PIN, LOW);
     digitalWrite(LED_RED_PIN, HIGH);
+    return true;
+  } else if (strcmp(cmd, "LED R") == 0) {
+    digitalWrite(LED_BLUE_PIN, HIGH);
+    digitalWrite(LED_GREEN_PIN, HIGH);
+    digitalWrite(LED_RED_PIN, LOW);
     return true;
   }
 
@@ -183,6 +183,12 @@ void playTTS() {
 void setup() {
   Serial.begin(115200);
   pinMode(BUTTON_PIN, INPUT_PULLDOWN);
+  pinMode(LED_BLUE_PIN, OUTPUT);
+  pinMode(LED_GREEN_PIN, OUTPUT);
+  pinMode(LED_RED_PIN, OUTPUT);
+  digitalWrite(LED_BLUE_PIN, HIGH);
+  digitalWrite(LED_GREEN_PIN, HIGH);
+  digitalWrite(LED_RED_PIN, HIGH);
 
   i2s_config_t i2s_config = {
     .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_TX),
@@ -300,6 +306,7 @@ void loop() {
       udp.print("STOP\n");
       udp.endPacket();
       recording = false;
+      flushUdp();
       waitngForServer = true;
       Serial.println("STOP");
     }
