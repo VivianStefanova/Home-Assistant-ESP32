@@ -4,6 +4,53 @@
 #include <WiFiUdp.h>
 #include <WiFiUdp.h>
 
+#define LED_BLUE_PIN  18
+#define LED_GREEN_PIN 17
+#define LED_RED_PIN 16
+
+/*Led commands:
+(TTS is palyed after every command)
+LED ON - turns the light white
+LED OFF - turns the light off
+LED B - turns the light blue
+LED G - turns the light green
+LED R - turns the light red
+NONE - no command recognized only plays TTS
+*/
+
+bool checkLedCommand(const char* cmd) {
+  if (strcmp(cmd, "NONE") == 0) {
+    return true;
+  }
+  if (strcmp(cmd, "LED ON") == 0) {
+    digitalWrite(LED_BLUE_PIN, HIGH);
+    digitalWrite(LED_GREEN_PIN, HIGH);
+    digitalWrite(LED_RED_PIN, HIGH);
+    return true;
+  } else if (strcmp(cmd, "LED OFF") == 0) {
+    digitalWrite(LED_BLUE_PIN, LOW);
+    digitalWrite(LED_GREEN_PIN, LOW);
+    digitalWrite(LED_RED_PIN, LOW);
+    return true;
+  } else if (strcmp(cmd, "LED B") == 0) {
+    digitalWrite(LED_BLUE_PIN, HIGH);
+    digitalWrite(LED_GREEN_PIN, LOW);
+    digitalWrite(LED_RED_PIN, LOW);
+    return true;
+  } else if (strcmp(cmd, "LED G") == 0) {
+    digitalWrite(LED_BLUE_PIN, LOW);
+    digitalWrite(LED_GREEN_PIN, HIGH);
+    digitalWrite(LED_RED_PIN, LOW);
+    return true;
+  } else if (strcmp(cmd, "LED R") == 0) {
+    digitalWrite(LED_BLUE_PIN, LOW);
+    digitalWrite(LED_GREEN_PIN, LOW);
+    digitalWrite(LED_RED_PIN, HIGH);
+    return true;
+  }
+
+  return false;
+}
 
 //Wifi credentials
 const char* ssid       = "Vin1";
@@ -186,19 +233,28 @@ void setup() {
 }
 int timeout=0;
 void loop() {
-  //if(waitngForServer) {
-    // //Serial.println("Waiting for TTS from server...");
-    // int packetSize = udp.parsePacket();
-    // if (packetSize > 0) {
-    //   char header[10];
-    //   int len = udp.read(header, sizeof(header) - 1);
-    //   if (strncmp((char*)header, "START", 5) == 0) {
-    //                 Serial.println(">> START TTS received");
-    //                 playingTTS = true;
-    //                 waitngForServer = false;
-    //             }
+  if(waitngForServer) {
+    //Serial.println("Waiting for TTS from server...");
+    int packetSize = udp.parsePacket();
+    if (packetSize > 0) {
+      char header[15];
+      int len = udp.read(header, sizeof(header) - 1);
+      header[len] = '\0';
+      if (checkLedCommand(header)) {
+                    Serial.println("Command executed: ");
+                    Serial.print(header);
+                    flushUdp();
+                    i2s_zero_dma_buffer(I2S_PORT);
+                    playingTTS = true;
+                    waitngForServer = false;
+                }else{
+                    Serial.println("Unknown command: ");
+                    Serial.print(header);
+                    flushUdp();
+                    waitngForServer = false;
+                }
 
-    // }
+    }
     // timeout++;
     // //50 seconds timeout
     // if(timeout>50000){
@@ -206,8 +262,8 @@ void loop() {
     //   waitngForServer=false;
     //   timeout=0;
     // }
-  //}else if (playingTTS){ 
-  if (playingTTS){
+  }else if (playingTTS){ 
+  // if (playingTTS){
     Serial.println("Playing TTS");
     playTTS();
     Serial.println("TTS playback finished");
@@ -244,10 +300,7 @@ void loop() {
       udp.print("STOP\n");
       udp.endPacket();
       recording = false;
-      //waitngForServer = true;
-      flushUdp();
-      i2s_zero_dma_buffer(I2S_PORT);
-      playingTTS = true;
+      waitngForServer = true;
       Serial.println("STOP");
     }
 
