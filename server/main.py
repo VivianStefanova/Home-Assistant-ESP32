@@ -16,14 +16,11 @@ SLEEP_TIME = 0.015
 
 def send_wav(sock: socket.socket, addr: tuple[str, int], filename: str):
     with wave.open(filename, 'rb') as wf:
-        #sock.sendto(b"START", addr)
         print(">> Streaming Audio...")
 
-         # ---- HARD VALIDATION ----
         assert wf.getnchannels() == 1, "WAV must be mono"
         assert wf.getsampwidth() == 2, "WAV must be 16-bit"
         assert wf.getframerate() == 16000, "WAV must be 16kHz"
-
 
         while True:
             data = wf.readframes(CHUNK_SIZE // (wf.getsampwidth() * wf.getnchannels()))
@@ -75,7 +72,7 @@ if __name__ == "__main__":
                             received_wav = f.name
 
                     elif data.find(b"STOP") != -1 and received_wav:
-                        with wave.open(received_wav, 'wb') as wav_file:
+                        with wave.open(received_wav, "wb") as wav_file:
                             wav_file.setnchannels(speech.CHANNELS)
                             wav_file.setsampwidth(speech.SAMPLE_WIDTH)
                             wav_file.setframerate(speech.SAMPLE_RATE)
@@ -91,15 +88,22 @@ if __name__ == "__main__":
                         else:
                             os.remove(received_wav)
 
-                            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode='wb') as f:
+                            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False, mode="wb") as f:
                                 response_wav = f.name
 
                         received_wav = None
 
-                        response = ask_llama(transcript)
-                        print(f"\n>>> LLAMA SAYS: {response}\n")
+                        response: dict[str, str] = ask_llama(transcript)
+                        print(f"\n>>> LLAMA SAYS: {response["content"]}\n")
 
-                        speech.tts(response, response_wav)
+                        speech.tts(response["content"], response_wav)
+
+                        command_bytes = response["command"].upper().encode()
+
+                        for i in range(5):
+                            s.sendto(command_bytes, client_addr)
+                            time.sleep(0.005)
+
                         send_wav(s, client_addr, response_wav)
 
                         if not args.test:
@@ -110,6 +114,11 @@ if __name__ == "__main__":
                     elif received_wav:
                         audio_bytes.append(data)
                 except socket.timeout:
+                    continue
+                except ConnectionResetError:
+                    # This catches [WinError 10054]
+                    # It means "The previous client I talked to is dead."
+                    # We just ignore it and loop again to wait for a NEW client.
                     continue
     except KeyboardInterrupt:
         print("\nServer stopped by user")

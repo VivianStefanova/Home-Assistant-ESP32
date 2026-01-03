@@ -8,7 +8,11 @@ import speech
 
 SERVER_IP = "127.0.0.1"
 SERVER_PORT = 5005
-CHUNK_SIZE = 256
+CHUNK_SIZE = 512
+
+def is_command(data: bytes) -> bool:
+    commands = [b"LED ON", b"LED OFF", b"LED R", b"LED G", b"LED B", b"NONE"]
+    return any(data.startswith(cmd) for cmd in commands)
 
 def emulate_esp32():
     input_file = sys.argv[1] if len(sys.argv) > 1 else os.path.join("audio_tests", "date.wav")
@@ -63,9 +67,11 @@ def emulate_esp32():
                 if not data:
                     break
 
-                if data.startswith(b"START"):
-                    print("START recording")
-                    received_wav = os.path.join("audio_tests", "response.wav")
+                if is_command(data):
+                    print(data.decode())
+
+                    if not received_wav:
+                        received_wav = os.path.join("audio_tests", "response.wav")
 
                 elif data.find(b"STOP") != -1 and received_wav:
                     with wave.open(received_wav, 'wb') as wav_file:
